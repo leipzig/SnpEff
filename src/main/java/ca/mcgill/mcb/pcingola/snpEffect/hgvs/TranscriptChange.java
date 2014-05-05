@@ -1,10 +1,26 @@
 package ca.mcgill.mcb.pcingola.snpEffect.hgvs;
 
+import java.io.*;
 import java.util.List;
 
+import ca.mcgill.mcb.pcingola.binseq.DnaSequence;
 import ca.mcgill.mcb.pcingola.interval.*;
 import ca.mcgill.mcb.pcingola.snpEffect.ChangeEffect;
 import ca.mcgill.mcb.pcingola.util.GprSeq;
+
+import java.net.URL;
+import java.net.URLEncoder;
+import java.util.logging.Logger;
+
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+
+
+import org.xml.sax.Attributes;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
+
 
 /**
  * Jeremy Leipzig
@@ -470,9 +486,105 @@ public class TranscriptChange {
         return fromPreceeding<toProceeding;
     }
 
-    public void allIntronTxPos(){
+    //from Pierre Lindenbaum's jvarkit
+    //https://github.com/lindenb/jvarkit/blob/7303fc9acdfc984b907a7c2a738cee5a6206d7e7/src/main/java/com/github/lindenb/jvarkit/util/bio/BioDASGenomicSequence.java
+    public String fetchGenomicSequenceFromUCSC(String genome, String chromosome, int start,int end) throws RuntimeException{
+        String uri= null;
+        SAXParser parser;
+        byte buffer[]=null;
+        String sequence;
+        int buffer_pos=-1;
+        SAXParserFactory f=SAXParserFactory.newInstance();
+        f.setSchema(null);
+        f.setNamespaceAware(false);
+        f.setValidating(false);
+        try
+        {
+            parser=f.newSAXParser();
+        }
+        catch(Exception err)
+        {
+            throw new RuntimeException(err.getMessage());
+        }
+
+        try {
+            uri = "http://genome.ucsc.edu/cgi-bin/das/"+genome+"/dna?segment="+
+                    URLEncoder.encode(chromosome + ":" + (start + 1) + "," + (end),
+                            "UTF-8");
+            DasHandler handler=new DasHandler();
+            InputStream in= null;
+            try {
+                in = new URL(uri).openStream();
+                try {
+                    parser.parse(in, handler);
+                } catch (SAXException e) {
+                    e.printStackTrace();
+                }
+                in.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            sequence=handler.baos.toString();
+            return sequence;
+
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException("Unable to encode genomic query URL");
+        }
+    }
+
+    private class DasHandler
+            extends DefaultHandler {
+        private ByteArrayOutputStream baos = null;
+        int reserve = 100000;
+        Integer length = null;
+
+        public DasHandler() {
+        }
+
+        @Override
+        public void startDocument() throws SAXException {
+            baos = null;
+        }
+
+        public InputSource resolveEntity(String publicId, String systemId) {
+            return new InputSource(new StringReader(""));
+        }
+
+        @Override
+        public void startElement(String uri, String localName, String name,
+                                 Attributes attributes) throws SAXException {
+            if (name.equals("DNA")) {
+                this.baos = new ByteArrayOutputStream(this.reserve);
+            } else if (name.equals("SEGMENT")) {
+                String c = attributes.getValue("id");
+                if (c == null) return;
+                //if(!(getChrom().equals(c) || getChrom().equals("chr"+c))) return;
+                c = attributes.getValue("stop");
+                if (c == null) return;
+                this.length = Integer.parseInt(c);
+            }
+        }
+
+        @Override
+        public void characters(char[] ch, int start, int length)
+                throws SAXException {
+            if (this.baos == null) return;
+            for (int i = 0; i < length; ++i) {
+                char c = Character.toUpperCase(ch[start + i]);
+                if (Character.isWhitespace(c)) continue;
+                this.baos.write((byte) c);
+            }
+        }
+    }
+
+
+    public void allIntronTxPos(Intron intron){
         String txPosStringSt=intronFormat(seqChange.getStart());
         String txPosStringEnd=intronFormat(seqChange.getEnd());
+        String chr = transcript.getChromosomeName();
+        String genomeName = transcript.getGenomeName();
+        String genomicSequence=fetchGenomicSequenceFromUCSC( genomeName, chr, seqChange.getStart(),seqChange.getEnd()+10);
 
         if(seqChange.isDel()){
             if(seqChange.size()==1){

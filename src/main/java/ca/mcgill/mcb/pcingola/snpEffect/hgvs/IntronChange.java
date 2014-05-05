@@ -35,7 +35,7 @@ public class IntronChange extends TranscriptChange {
             changeEffect.set(intron, EffectType.INTRON, "");
 
             //sets txPos
-            allIntronTxPos();
+            allIntronTxPos(intron);
 
             changeEffect.setTxPos(txPos);
             return true;

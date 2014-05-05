@@ -66,7 +66,7 @@ public class ExonChange extends TranscriptChange {
                     }
                 }catch (IndexOutOfBoundsException f){
                     //totally intronic
-                    allIntronTxPos();
+                    allIntronTxPos(intron);
                 }
                 changeEffect.setTxPos(txPos);
                 return true;
